@@ -19,7 +19,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                cd ${FRONTEND_DIR}
+                cd frontend
                 npm install
                 '''
             }
