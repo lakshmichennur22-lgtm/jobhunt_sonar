@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        SONAR_PROJECT_KEY = insurance
-        SONAR_HOST_URL    = http://3.94.52.72:9000/
-        SONAR_TOKEN       = sqp_a7025317d6433c2037b275e723f0f58f6060b450
+        SONAR_PROJECT_KEY = "insurance"
+        SONAR_HOST_URL    = "http://3.94.52.72:9000/"
+        SONAR_TOKEN       = "sqp_a7025317d6433c2037b275e723f0f58f6060b450"
 
     }
 
