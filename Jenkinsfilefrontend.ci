@@ -25,10 +25,9 @@ pipeline {
             }
         }
   
-        stage('Build Frontend') {
+        stage('sonar scanner') {
             steps {
                 sh '''
-                npm install -g sonar-scanner
                 sonar-scanner \
                   -Dsonar.projectKey=$(SONAR_PROJECT_KEY) \
                   -Dsonar.sources=. \
