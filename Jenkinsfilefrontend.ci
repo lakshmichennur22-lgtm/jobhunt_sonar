@@ -1,0 +1,42 @@
+pipeline {
+    agent any
+
+    environment {
+        SONAR_PROJECT_KEY = insurance
+        SONAR_HOST_URL    = http://3.94.52.72:9000/
+        SONAR_TOKEN       = sqp_a7025317d6433c2037b275e723f0f58f6060b450
+
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                cd ${FRONTEND_DIR}
+                npm install
+                '''
+            }
+        }
+  
+        stage('Build Frontend') {
+            steps {
+                sh '''
+                npm install -g sonar-scanner
+                sonar-scanner \
+                  -Dsonar.projectKey=$(SONAR_PROJECT_KEY) \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=$(SONAR_HOST_URL) \
+                  -Dsonar.login=$(SONAR_TOKEN) \
+                  -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info,backend/coverage/lcov.info
+                '''  
+            }
+        }
+    }
+}
