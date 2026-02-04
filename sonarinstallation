@@ -1,0 +1,70 @@
+Step-by-Step Installation
+1. Update Packages
+
+text
+sudo apt update
+2. Install Java (OpenJDK 17)
+
+text
+sudo apt install openjdk-17-jdk -y
+java -version
+3. Install Unzip
+
+text
+sudo apt install unzip
+4. Download SonarQube
+Visit the official SonarQube download page and copy the latest link. For example:
+
+text
+sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-25.2.0.102705.zip
+5. Extract SonarQube
+
+text
+unzip sonarqube-25.2.0.102705.zip
+sudo mv sonarqube-25.2.0.102705 /opt/sonarqube
+6. Create a System User for SonarQube
+
+text
+sudo adduser --system --no-create-home --group --disabled-login sonarqube
+sudo chown -R sonarqube:sonarqube /opt/sonarqube
+7. Optional: Configure Database (for production)
+
+Edit /opt/sonarqube/conf/sonar.properties and set up JDBC connection details for PostgreSQL.
+
+8. Create a Systemd Service File
+Create /etc/systemd/system/sonarqube.service:
+
+text
+[Unit]
+Description=SonarQube service
+After=syslog.target network.target
+
+[Service]
+Type=forking
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+User=sonarqube
+Group=sonarqube
+Restart=always
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+Reload systemd and enable the service:
+
+text
+sudo systemctl daemon-reload
+sudo systemctl start sonarqube
+sudo systemctl enable sonarqube
+9. Access SonarQube
+
+Open a browser and go to http://<your-server-ip>:9000
+
+Default login: admin / admin
+
+sonar-scanner \
+  -Dsonar.projectKey=job-hunt \
+  -Dsonar.sources=. \
+  -Dsonar.host.url=http://172.202.113.116:9000 \
+  -Dsonar.token=sqp_7ae3ac1602b668f069459a5d28bc8711d1caca08

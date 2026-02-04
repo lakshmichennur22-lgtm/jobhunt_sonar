@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    environment {
+        NEXUS_URL  = "http://http://13.49.68.226:8081"
+        NEXUS_REPO = "insurance"
+        FRONTEND_DIR = "frontend"
+        ZIP_NAME = "frontend-build-${BUILD_NUMBER}.zip"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                cd ${FRONTEND_DIR}
+                npm install
+                '''
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                sh '''
+                cd ${FRONTEND_DIR}
+                npm run build
+                '''
+            }
+        }
+
+        stage('Zip Artifact') {
+            steps {
+                sh '''
+                cd ${FRONTEND_DIR}
+                zip -r ${ZIP_NAME} build
+                mv ${ZIP_NAME} ..
+                '''
+            }
+        }
+
+        stage('Publish to Nexus (RAW)') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-creds',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    sh '''
+                    echo "Uploading artifact to Nexus RAW repository"
+                    curl --fail -u $NEXUS_USER:$NEXUS_PASS \
+                      --upload-file ${ZIP_NAME} \
+                      ${NEXUS_URL}/repository/${NEXUS_REPO}/frontend/${ZIP_NAME}
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Frontend build & upload completed"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

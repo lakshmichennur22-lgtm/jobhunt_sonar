@@ -1,0 +1,155 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TERRAFORM_WORKING_DIR: IaaC
+
+stages:
+# -----------------
+# DEV Stage
+# -----------------
+- stage: DEV
+  displayName: "Terraform Deployment to DEV"
+  jobs:
+    - job: TerraformDev
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: "Install latest Terraform"
+          inputs:
+            azureSubscription: ado
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              if ! command -v terraform &> /dev/null; then
+                echo "🚫 Terraform not found. Installing..."
+                sudo apt-get update -y
+                sudo apt-get install -y jq unzip curl
+                latest_version=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)
+                curl -s -O https://releases.hashicorp.com/terraform/${latest_version}/terraform_${latest_version}_linux_amd64.zip
+                unzip -q terraform_${latest_version}_linux_amd64.zip
+                sudo mv terraform /usr/local/bin/
+              fi
+              terraform -version
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: ado
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              cd $(TERRAFORM_WORKING_DIR)
+              ls
+              echo "👉 Running Terraform Init..."
+              terraform init -reconfigure -backend-config=dev/backend.tfvars
+
+              echo "👉 Validating..."
+              terraform validate
+
+              echo "👉 Planning..."
+              terraform plan -out=tfplan -var-file=dev/dev.tfvars
+
+              echo "👉 Applying..."
+              terraform apply -auto-approve tfplan
+          displayName: "Terraform Init/Plan/Apply (DEV)"
+
+# -----------------
+# QA Stage
+# -----------------
+- stage: QA
+  displayName: "Terraform Deployment to QA"
+  dependsOn: DEV
+  jobs:
+    - job: TerraformQA
+      steps:
+        - checkout: self
+        - task: AzureCLI@2
+          displayName: "Install latest Terraform"
+          inputs:
+            azureSubscription: ado
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              if ! command -v terraform &> /dev/null; then
+                echo "🚫 Terraform not found. Installing..."
+                sudo apt-get update -y
+                sudo apt-get install -y jq unzip curl
+                latest_version=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)
+                curl -s -O https://releases.hashicorp.com/terraform/${latest_version}/terraform_${latest_version}_linux_amd64.zip
+                unzip -q terraform_${latest_version}_linux_amd64.zip
+                sudo mv terraform /usr/local/bin/
+              fi
+              terraform -version
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: ado
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              cd $(TERRAFORM_WORKING_DIR)
+              echo "👉 Running Terraform Init..."
+              terraform init -reconfigure -backend-config=qa/backend.tfvars
+
+              echo "👉 Validating..."
+              terraform validate
+
+              echo "👉 Planning..."
+              terraform plan -out=tfplan -var-file=qa/qa.tfvars
+
+              echo "👉 Applying..."
+              terraform apply -auto-approve tfplan
+          displayName: "Terraform Init/Plan/Apply (QA)"
+
+# -----------------
+# PROD Stage (Manual Approval via Environment)
+# -----------------
+- stage: PROD
+  displayName: "Terraform Deployment to PROD"
+  dependsOn: QA
+  jobs:
+    - deployment: TerraformProd
+      displayName: "Terraform Apply in Prod"
+      environment: "prod"    # 👈 approval gate in Azure DevOps
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - checkout: self
+              - task: AzureCLI@2
+                displayName: "Install latest Terraform"
+                inputs:
+                  azureSubscription: ado
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    if ! command -v terraform &> /dev/null; then
+                      echo "🚫 Terraform not found. Installing..."
+                      sudo apt-get update -y
+                      sudo apt-get install -y jq unzip curl
+                      latest_version=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)
+                      curl -s -O https://releases.hashicorp.com/terraform/${latest_version}/terraform_${latest_version}_linux_amd64.zip
+                      unzip -q terraform_${latest_version}_linux_amd64.zip
+                      sudo mv terraform /usr/local/bin/
+                    fi
+                    terraform -version
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: ado
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    cd $(TERRAFORM_WORKING_DIR)
+                    echo "👉 Running Terraform Init..."
+                    terraform init -reconfigure -backend-config=prod/backend.tfvars
+
+                    echo "👉 Validating..."
+                    terraform validate
+
+                    echo "👉 Planning..."
+                    terraform plan -out=tfplan -var-file=prod/prod.tfvars
+
+                    echo "👉 Applying..."
+                    terraform apply -auto-approve tfplan
+                displayName: "Terraform Init/Plan/Apply (PROD)"

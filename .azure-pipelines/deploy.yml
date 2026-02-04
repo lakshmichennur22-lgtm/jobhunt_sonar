@@ -1,0 +1,205 @@
+trigger: none  # Only manual or artifact-based trigger
+
+resources:
+  pipelines:
+    - pipeline: ciPipeline
+      source: 'build'   # CI pipeline name in Azure DevOps
+      trigger:
+        branches:
+          include:
+            - main
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+
+# ---------------------------
+# DEPLOY TO DEV
+# ---------------------------
+- stage: DeployDev
+  displayName: "Deploy to Dev"
+  jobs:
+    - deployment: DevDeploy
+      environment: dev
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              # Download artifacts from CI pipeline
+              - download: ciPipeline
+                artifact: app-artifacts
+
+              # Ensure deploy folder exists, then copy artifacts
+              - task: SSH@0
+                displayName: 'Prepare server directories'
+                inputs:
+                  sshEndpoint: 'dev-ssh-service'
+                  commands: |
+                    sudo mkdir -p /var/www/deploy
+                    sudo chown azureuser:azureuser /var/www/deploy
+
+              - task: CopyFilesOverSSH@0
+                displayName: 'Copy build artifacts to server'
+                inputs:
+                  sshEndpoint: 'dev-ssh-service'
+                  sourceFolder: '$(Pipeline.Workspace)/ciPipeline/app-artifacts'
+                  contents: '*.tar.gz'
+                  targetFolder: '/var/www/deploy'
+
+              # Extract, configure Nginx, and restart services
+              - task: SSH@0
+                displayName: 'Deploy and restart apps'
+                inputs:
+                  sshEndpoint: 'dev-ssh-service'
+                  commands: |
+                    set -e
+
+                    # Frontend
+                    sudo rm -rf /var/www/frontend/*
+                    sudo mkdir -p /var/www/frontend
+                    sudo tar -xzf /var/www/deploy/frontend.tar.gz -C /var/www/frontend --strip-components=1
+
+                    # Backend
+                    sudo rm -rf /var/www/backend/*
+                    sudo mkdir -p /var/www/backend
+                    sudo tar -xzf /var/www/deploy/backend.tar.gz -C /var/www/backend --strip-components=1
+
+                    # Restart backend with PM2
+                    cd /var/www/backend
+                    pm2 restart job-hunt-backend --update-env || pm2 start server.js --name job-hunt-backend
+                    pm2 save
+                    # Check Nginx configuration safely
+                    sudo nginx -t 2>&1 || true
+                    # Reload Nginx
+                    sudo systemctl reload nginx 2>&1 || true
+
+                    
+
+
+
+
+
+# ---------------------------
+# DEPLOY TO QA
+# ---------------------------
+- stage: DeployQA
+  displayName: "Deploy to QA"
+  dependsOn: DeployDev
+  jobs:
+    - deployment: QADeploy
+      environment: qa  # Add approvals in Azure DevOps environment
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              # Download artifacts from CI pipeline
+              - download: ciPipeline
+                artifact: app-artifacts
+
+              # Ensure deploy folder exists, then copy artifacts
+              - task: SSH@0
+                displayName: 'Prepare server directories'
+                inputs:
+                  sshEndpoint: 'qa-ssh-service'
+                  commands: |
+                    sudo mkdir -p /var/www/deploy
+                    sudo chown azureuser:azureuser /var/www/deploy
+
+              - task: CopyFilesOverSSH@0
+                displayName: 'Copy build artifacts to server'
+                inputs:
+                  sshEndpoint: 'qa-ssh-service'
+                  sourceFolder: '$(Pipeline.Workspace)/ciPipeline/app-artifacts'
+                  contents: '*.tar.gz'
+                  targetFolder: '/var/www/deploy'
+
+              # Extract, configure Nginx, and restart services
+              - task: SSH@0
+                displayName: 'Deploy and restart apps'
+                inputs:
+                  sshEndpoint: 'qa-ssh-service'
+                  commands: |
+                    set -e
+
+                    # Frontend
+                    sudo rm -rf /var/www/frontend/*
+                    sudo mkdir -p /var/www/frontend
+                    sudo tar -xzf /var/www/deploy/frontend.tar.gz -C /var/www/frontend --strip-components=1
+
+                    # Backend
+                    sudo rm -rf /var/www/backend/*
+                    sudo mkdir -p /var/www/backend
+                    sudo tar -xzf /var/www/deploy/backend.tar.gz -C /var/www/backend --strip-components=1
+
+                    # Restart backend with PM2
+                    cd /var/www/backend
+                    pm2 restart job-hunt-backend --update-env || pm2 start server.js --name job-hunt-backend
+                    pm2 save
+                    # Check Nginx configuration safely
+                    sudo nginx -t 2>&1 || true
+                    # Reload Nginx
+                    sudo systemctl reload nginx 2>&1 || true
+
+
+
+
+# ---------------------------
+# DEPLOY TO PROD
+# ---------------------------
+- stage: DeployProd
+  displayName: "Deploy to Prod"
+  dependsOn: DeployQA
+  jobs:
+    - deployment: ProdDeploy
+      environment: prod  # Add approvals in Azure DevOps environment
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              # Download artifacts from CI pipeline
+              - download: ciPipeline
+                artifact: app-artifacts
+
+              # Ensure deploy folder exists, then copy artifacts
+              - task: SSH@0
+                displayName: 'Prepare server directories'
+                inputs:
+                  sshEndpoint: 'prod-ssh-service'
+                  commands: |
+                    sudo mkdir -p /var/www/deploy
+                    sudo chown azureuser:azureuser /var/www/deploy
+
+              - task: CopyFilesOverSSH@0
+                displayName: 'Copy build artifacts to server'
+                inputs:
+                  sshEndpoint: 'prod-ssh-service'
+                  sourceFolder: '$(Pipeline.Workspace)/ciPipeline/app-artifacts'
+                  contents: '*.tar.gz'
+                  targetFolder: '/var/www/deploy'
+
+              # Extract, configure Nginx, and restart services
+              - task: SSH@0
+                displayName: 'Deploy and restart apps'
+                inputs:
+                  sshEndpoint: 'prod-ssh-service'
+                  commands: |
+                    set -e
+
+                    # Frontend
+                    sudo rm -rf /var/www/frontend/*
+                    sudo mkdir -p /var/www/frontend
+                    sudo tar -xzf /var/www/deploy/frontend.tar.gz -C /var/www/frontend --strip-components=1
+
+                    # Backend
+                    sudo rm -rf /var/www/backend/*
+                    sudo mkdir -p /var/www/backend
+                    sudo tar -xzf /var/www/deploy/backend.tar.gz -C /var/www/backend --strip-components=1
+
+                    # Restart backend with PM2
+                    cd /var/www/backend
+                    pm2 restart job-hunt-backend --update-env || pm2 start server.js --name job-hunt-backend
+                    pm2 save
+                    # Check Nginx configuration safely
+                    sudo nginx -t 2>&1 || true
+                    # Reload Nginx
+                    sudo systemctl reload nginx 2>&1 || true
